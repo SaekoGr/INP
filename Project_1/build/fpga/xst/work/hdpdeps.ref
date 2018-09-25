@@ -1,7 +1,0 @@
-V3 3
-FL C:/FitkitSVN/apps/demo/Project_1/fpga/ledc8x8.vhd 2018/09/25.13:33:56 O.40d
-EN work/ledc8x8 1537875239 FL C:/FitkitSVN/apps/demo/Project_1/fpga/ledc8x8.vhd \
-      PB ieee/std_logic_1164 1296775758 PB ieee/std_logic_arith 1296775759 \
-      PB ieee/STD_LOGIC_UNSIGNED 1296775760 PB ieee/NUMERIC_STD 1296775759
-AR work/ledc8x8/main 1537875240 \
-      FL C:/FitkitSVN/apps/demo/Project_1/fpga/ledc8x8.vhd EN work/ledc8x8 1537875239

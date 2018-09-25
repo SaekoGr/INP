@@ -1,2 +1,0 @@
-vhdl work "../../fpga/ledc8x8.vhd"
-vhdl work "../../fpga/sim/ledc8x8_tb.vhd"
