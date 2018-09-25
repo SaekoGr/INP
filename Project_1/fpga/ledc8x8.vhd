@@ -42,31 +42,47 @@ begin
 	 begin
 			if RESET = '1' then
 				cnt <= std_logic_vector(to_unsigned(0, 8));
-				state <= "1000";
 			elsif rising_edge(SMCLK) then
 				cnt <= cnt + 1;
 			end if;
 	 end process generator;
 	 
-	 decoder: process(state, tmp_row, tmp_led)
+	 
+	 clock_enable <= '1' when ce_cnt = "11111111" else '0';
+	 
+	 rotacny: process(RESET)
 	 begin
-		if state = "1000" then -- show the name's initial
-			next_state <= "0100";
-		
-		elsif state = "0100" then
-			next_state <= "0010";
-		
-		elsif state = "0010" then	-- show
-			next_state <= "0001";
-		
-		elsif state = "0001" then -- show nothing
-			next_state <= "1000";
-		
-			
+		if RESET = '1' then
+			tmp_row <= "10000000";
+		elsif (SMCLK = '1') and (clock_enable = '1') then
+			tmp_row <= tmp_row(0) & tmp_row(7 downto 1);
+		end if;
+	 end process rotacny;
+	 
+	 decoder: process(tmp_row)
+	 begin
+		if tmp_row = "10000000" then
+			tmp_led <= "11111111";
+		elsif tmp_row = "01000000" then
+			tmp_led <= "11100011";
+		elsif tmp_row = "00100000" then
+			tmp_led <= "11011101";
+		elsif tmp_row = "00010000" then
+			tmp_led <= "11011111";
+		elsif tmp_row = "00001000" then
+			tmp_led <= "11100011";
+		elsif tmp_row = "00000100" then
+			tmp_led <= "11111101";
+		elsif tmp_row = "00000010" then
+			tmp_led <= "10111001";
+		elsif tmp_row = "00000001" then
+			tmp_led <= "11000111";
+		else
+			tmp_led <= "11111111";
 		end if;
 	 end process decoder;
+
 	 
-	 state <= next_state;
 	 ROW <= tmp_row;
 	 LED <= tmp_led;
 

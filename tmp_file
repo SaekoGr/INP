@@ -1,0 +1,23 @@
+decoder: process(tmp_row)
+	 begin
+		if tmp_row = "10000000" then
+			tmp_led <= "11111111";
+		elsif tmp_row = "01000000" then
+			tmp_led <= "11100011";
+		elsif tmp_row = "00100000" then
+			tmp_led <= "11011101";
+		elsif tmp_row = "00010000" then
+			tmp_led <= "11011111";
+		elsif tmp_row = "00001000" then
+			tmp_led <= "11100011";
+		elsif tmp_row = "00000100" then
+			tmp_led <= "11111101";
+		elsif tmp_row = "00000010" then
+			tmp_led <= "10111001";
+		elsif tmp_row = "00000001" then
+			tmp_led <= "11000111";
+		else
+			tmp_led <= "11111111";
+		end if;
+	 end process decoder;
+
