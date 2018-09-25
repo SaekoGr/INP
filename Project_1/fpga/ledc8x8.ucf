@@ -9,3 +9,19 @@ NET SMCLK      LOC = P80;
 NET RESET      LOC = P155;
 NET ROW<0>     LOC = P204;
 NET ROW<1>     LOC = P2;
+NET ROW<2>     LOC = ;
+NET ROW<3>     LOC = ;
+NET ROW<4>     LOC = ;
+NET ROW<5>     LOC = ;
+NET ROW<6>     LOC = ;
+NET ROW<7>     LOC = ;
+
+NET LED<0>     LOC = ;
+NET LED<1>     LOC = ;
+NET LED<2>     LOC = ;
+NET LED<3>     LOC = ;
+NET LED<4>     LOC = ;
+NET LED<5>     LOC = ;
+NET LED<6>     LOC = ;
+NET LED<7>     LOC = ;
+
