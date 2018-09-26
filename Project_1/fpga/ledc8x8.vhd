@@ -35,7 +35,7 @@ architecture main of ledc8x8 is
 	
 	-- signal that counts and then switches
 	signal switch_counter : std_logic_vector(19 downto 0) := "00000000000000000000";
-	
+	-- signal for allowing to switch to the next state
 	signal can_switch : std_logic := '0';
 
 
@@ -55,6 +55,7 @@ begin
 	 
 	 generator: process(SMCLK, RESET, cnt, switch_counter)
 	 begin
+			-- reset and counting 
 			if (RESET = '1') then
 				cnt <= "00000000";
 				switch_counter <= "00000000000000000000";
@@ -63,12 +64,14 @@ begin
 				switch_counter <= switch_counter + 1;
 			end if;
 			
+			-- enable clock when counter is finished
 			if (cnt = "11111111") then
 				clock_enable <= '1';
 			else
 				clock_enable <= '0';
 			end if;
 			
+			-- enable switch when counter is finished
 			if (switch_counter = "11111111111111111111") then
 				can_switch <= '1';
 			else
@@ -77,14 +80,16 @@ begin
 			
 	 end process generator;
 	 
-	 rotate: process(RESET, SMCLK, clock_enable, can_switch)
+	 move_to_the_next: process(RESET, SMCLK, clock_enable, can_switch)
 	 begin
+		-- when reset = '1', start from the beginning
 		if RESET = '1' then
 			tmp_row <= "10000000";
 			state <= "1000";
+		-- when rising edge on SMCLK, choose the appropriate rows and state
 		elsif rising_edge(SMCLK) then
-			
-			if(clock_enable = '1') then-- moves thrugh the rows
+			-- moves thrugh the rows
+			if(clock_enable = '1') then
 				case tmp_row is
 					when "10000000" => tmp_row <= "01000000";
 					when "01000000" => tmp_row <= "00100000";
@@ -98,6 +103,7 @@ begin
 				end case;
 			end if;
 			
+			-- changes the state to the next one
 			if(can_switch = '1') then
 				case state is
 					when "1000" => state <= "0100";
@@ -109,9 +115,8 @@ begin
 			end if;
 			
 		end if;
-	 end process rotate;
+	 end process move_to_the_next;
 
-	
 	-- decoder for switching the leds on and off
 	showing_leds: process(tmp_row, state)
 	begin
@@ -137,7 +142,7 @@ begin
 				when "00000001" => tmp_led <= "11000011";
 				when others		=> tmp_led <= "11111111";
 			 end case;
-		else
+		else -- show nothing
 			tmp_led <= "11111110";
 		end if;	
 	 end process showing_leds;
@@ -146,5 +151,4 @@ begin
 	 ROW <= tmp_row;
 	 LED <= tmp_led;
 	 
-
 end main;
