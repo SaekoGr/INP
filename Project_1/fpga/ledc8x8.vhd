@@ -15,14 +15,29 @@ port ( -- Sem doplnte popis rozhrani obvodu.
 end ledc8x8;
 
 architecture main of ledc8x8 is
-	signal state	: std_logic_vector(3 to 0) := "1000"; -- initial state, showing the name's initial
-	signal next_state : std_logic_vector(3 to 0) := "0000";
-	signal clock_enable : std_logic;
-	signal cnt : std_logic_vector(0 to 7);
-	signal tmp_row : std_logic_vector(0 to 7);
-	signal tmp_led : std_logic_vector(0 to 7);
 
-    -- Sem doplnte definice vnitrnich signalu.
+   -- Sem doplnte definice vnitrnich signalu.
+	
+	-- enabling signal
+	signal clock_enable : std_logic := '0';
+	-- counter from 0 to 256
+	signal cnt : std_logic_vector(0 to 7) := "00000000";
+	-- help variable for row and led
+	signal tmp_row : std_logic_vector(7 downto 0) := "10000000";
+	signal tmp_led : std_logic_vector(7 downto 0) := "11111111";
+	
+	-- variable for state
+	-- 1000 -> Shows name's initial
+	-- 0100 -> Shows nothing
+	-- 0010 -> Shows surname's initial
+	-- 0001 -> Shows nothing
+	signal state : std_logic_vector(3 downto 0) := "1000";
+	
+	-- signal that counts and then switches
+	signal switch_counter : std_logic_vector(19 downto 0) := "00000000000000000000";
+	
+	signal can_switch : std_logic := '0';
+
 
 begin
 
@@ -38,52 +53,98 @@ begin
     -- Nezapomente take doplnit mapovani signalu rozhrani na piny FPGA
     -- v souboru ledc8x8.ucf.
 	 
-	 generator: process(SMCLK, RESET)
+	 generator: process(SMCLK, RESET, cnt, switch_counter)
 	 begin
-			if RESET = '1' then
-				cnt <= std_logic_vector(to_unsigned(0, 8));
+			if (RESET = '1') then
+				cnt <= "00000000";
+				switch_counter <= "00000000000000000000";
 			elsif rising_edge(SMCLK) then
 				cnt <= cnt + 1;
+				switch_counter <= switch_counter + 1;
 			end if;
+			
+			if (cnt = "11111111") then
+				clock_enable <= '1';
+			else
+				clock_enable <= '0';
+			end if;
+			
+			if (switch_counter = "11111111111111111111") then
+				can_switch <= '1';
+			else
+				can_switch <= '0';
+			end if;
+			
 	 end process generator;
 	 
-	 
-	 clock_enable <= '1' when ce_cnt = "11111111" else '0';
-	 
-	 rotacny: process(RESET)
+	 rotate: process(RESET, SMCLK, clock_enable, can_switch)
 	 begin
 		if RESET = '1' then
 			tmp_row <= "10000000";
-		elsif (SMCLK = '1') and (clock_enable = '1') then
-			tmp_row <= tmp_row(0) & tmp_row(7 downto 1);
+			state <= "1000";
+		elsif rising_edge(SMCLK) then
+			
+			if(clock_enable = '1') then-- moves thrugh the rows
+				case tmp_row is
+					when "10000000" => tmp_row <= "01000000";
+					when "01000000" => tmp_row <= "00100000";
+					when "00100000" => tmp_row <= "00010000";
+					when "00010000" => tmp_row <= "00001000";
+					when "00001000" => tmp_row <= "00000100";
+					when "00000100" => tmp_row <= "00000010";
+					when "00000010" => tmp_row <= "00000001";
+					when "00000001" => tmp_row <= "10000000";
+					when others => tmp_row <= "10000000";
+				end case;
+			end if;
+			
+			if(can_switch = '1') then
+				case state is
+					when "1000" => state <= "0100";
+					when "0100" => state <= "0010";
+					when "0010" => state <= "0001";
+					when "0001" => state <= "1000";
+					when others => state <= "1000";
+				end case;
+			end if;
+			
 		end if;
-	 end process rotacny;
-	 
-	 decoder: process(tmp_row)
-	 begin
-		if tmp_row = "10000000" then
-			tmp_led <= "11111111";
-		elsif tmp_row = "01000000" then
-			tmp_led <= "11100011";
-		elsif tmp_row = "00100000" then
-			tmp_led <= "11011101";
-		elsif tmp_row = "00010000" then
-			tmp_led <= "11011111";
-		elsif tmp_row = "00001000" then
-			tmp_led <= "11100011";
-		elsif tmp_row = "00000100" then
-			tmp_led <= "11111101";
-		elsif tmp_row = "00000010" then
-			tmp_led <= "10111001";
-		elsif tmp_row = "00000001" then
-			tmp_led <= "11000111";
-		else
-			tmp_led <= "11111111";
-		end if;
-	 end process decoder;
+	 end process rotate;
 
+	
+	-- decoder for switching the leds on and off
+	showing_leds: process(tmp_row, state)
+	begin
+		if state="1000" then -- state for showing S
+			case tmp_row is -- first row is skipped because it doesn't light up
+				when "01000000" => tmp_led <= "11100011";
+				when "00100000" => tmp_led <= "11011101";
+				when "00010000" => tmp_led <= "11011111";
+				when "00001000" => tmp_led <= "11100011";
+				when "00000100" => tmp_led <= "11111101";
+				when "00000010" => tmp_led<= "10111101";
+				when "00000001" => tmp_led <= "11000011";
+				when others		=> tmp_led <= "11111111";
+			end case;
+	   elsif state="0010" then -- state for showing G
+			case tmp_row is -- first row is skipped because it doesn't light up
+				when "01000000" => tmp_led <= "11000011";
+				when "00100000" => tmp_led <= "10111101";
+				when "00010000" => tmp_led <= "10111111";
+				when "00001000" => tmp_led <= "10110001";
+				when "00000100" => tmp_led <= "10111101";
+				when "00000010" => tmp_led<= "10111101";
+				when "00000001" => tmp_led <= "11000011";
+				when others		=> tmp_led <= "11111111";
+			 end case;
+		else
+			tmp_led <= "11111110";
+		end if;	
+	 end process showing_leds;
 	 
+	 -- output for ROW and LED
 	 ROW <= tmp_row;
 	 LED <= tmp_led;
+	 
 
 end main;
