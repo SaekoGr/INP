@@ -57,9 +57,9 @@ begin
 	 begin
 			-- reset and counting 
 			if (RESET = '1') then
-				cnt <= "00000000";
-				switch_counter <= "00000000000000000000";
-			elsif rising_edge(SMCLK) then
+				cnt <= std_logic_vector(to_unsigned(0, cnt'length));
+				switch_counter <= std_logic_vector(to_unsigned(0, switch_counter'length));
+			elsif SMCLK'event and SMCLK = '1' then
 				cnt <= cnt + 1;
 				switch_counter <= switch_counter + 1;
 			end if;
@@ -143,7 +143,7 @@ begin
 				when others		=> tmp_led <= "11111111";
 			 end case;
 		else -- show nothing
-			tmp_led <= "11111110";
+			tmp_led <= "11111111";
 		end if;	
 	 end process showing_leds;
 	 
