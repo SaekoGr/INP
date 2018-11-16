@@ -47,52 +47,66 @@ end cpu;
 --                      Architecture declaration
 -- ----------------------------------------------------------------------------
 architecture behavioral of cpu is
-	signal pc_reg : std_logic_vector(11 downto 0);
+	-- PC register signal
+	signal pc_reg : std_logic_vector(11 downto 0); -- this will be CODE_ADDR
 	signal pc_inc : std_logic;
 	signal pc_dec : std_logic;
 	
-	signal cnt_reg : std_logic_vector(7 downto 0);
+	signal cnt_reg : std_logic_vector(7 downto 0); -- this will be TODO
 	signal cnt_inc : std_logic;
 	signal cnt_dec : std_logic;
 	
-	signal ptr_reg : std_logic_vector(9 downto 0);
+	signal ptr_reg : std_logic_vector(9 downto 0); -- this will be DATA_ADRR
 	signal ptr_inc : std_logic;
 	signal ptr_dec : std_logic;
 	
-	type instruction is(
-		ptr_inc,
-		ptr_dec,
-		value_inc,
-		value_dec
-		-- TODO
-	);
-	signal current_instruction : insruction;
+	-- data to be written to memory
+	signal mem_data : std_logic_vector(7 downto 0) := "00000000";
+	signal sel : std_logic_vector(1 downto 0) := "00";
 	
 	type fsm_state is(
 		state_idle,
-		state_fetch_0,
-		state_fetch_1,
+		state_fetch,
 		state_decode,
+		
 		state_ptr_inc,
 		state_ptr_dec,
+		
+		state_value_inc_read,
 		state_value_inc,
-		state_value_dec
+		state_value_inc_write,
+		
+		state_value_dec_read,
+		state_value_dec,
+		state_value_dec_write,
+		
+		state_putchar,
+		state_getchar,
+		state_while_start,
+		state_while_end,
+		state_comment,
+		state_others
 		-- TODO
 	);
-	signal present_state : fsm_state; 
+	signal present_state : fsm_state := state_idle; 
 	signal next_state : fsm_state;
 
 begin
 
+ --                REGISTERS                    --
+ -- registers change according to RESET, CLK and
+ -- their special signals named as XX_inc and XX_dec
+ -- according to the name of the register
+
  -- PC Register
 	PC_process : process(RESET, CLK, pc_inc, pc_dec)
 	begin
-		if(RESET = '1') then
+		if(RESET = '1') then				-- when reset, pc_reg starts from all zeros
 			pc_reg <= "000000000000";
-		elsif(CLK'event) and (CLK='1') then
-			if(pc_inc = '1') then
+		elsif(CLK'event) and (CLK='1') then -- works when CLK is rising
+			if(pc_inc = '1') then            -- increases pc_reg
 				pc_reg <= pc_reg + 1;
-			elsif(pc_dec = '1') then
+			elsif(pc_dec = '1') then			-- decreases pc_reg
 				pc_reg <= reg - 1;
 			end if;
 		end if;
@@ -104,11 +118,11 @@ begin
 	CNT_process : process(RESET, CLK, cnt_inc, cnt_dec)
 	begin
 		if(RESET = '1') then
-			cnt_reg <= "00000000";
-		elsif(CLK'event) and (CLK = '1') then
-			if(cnt_inc = '1')then
+			cnt_reg <= "00000000";		-- when reset, cnt_reg starts from all zeros
+		elsif(CLK'event) and (CLK = '1') then -- works when CLK is rising
+			if(cnt_inc = '1')then				  -- increases cnt_reg
 				cnt_reg <= cnt_reg + 1;
-			elsif(cnt_dec = '1')then
+			elsif(cnt_dec = '1')then			  -- decreases cnt_reg
 				cnt_reg <= cnt_reg - 1;
 			end if;
 		end if;
@@ -116,20 +130,38 @@ begin
 
 	
  -- PTR Register
-	PTR_process : process
+	PTR_process : process(RESET, CLK, ptr_inc, ptr_dec)
 	begin
 		if(RESET = '1') then
-			ptr_reg <= "0000000000";
-		elsif(CLK'event) and (CLK = '1') then
-			if(ptr_inc = '1') then
+			ptr_reg <= "0000000000";	-- when reset, ptr_reg starts from all zeros
+		elsif(CLK'event) and (CLK = '1') then -- works when CLK is rising
+			if(ptr_inc = '1') then				  -- increases ptr_inc
 				ptr_reg <= ptr_reg + 1;
-			elsif(ptr_dec = '1') then
+			elsif(ptr_dec = '1') then			  -- decreases ptr_inc
 				ptr_reg <= ptr_reg - 1;
 			end if;
 		end if;
 	end process PTR_process;
 
 	DATA_ADDR <= ptr_reg;
+	
+ -- TODO: MUX
+	MUX_process : process
+	begin
+		if(RESET = '1') then
+			mem_data <= "00000000";
+		elsif(CLK'event and CLK = '1') then
+			if(sel = "00") then
+				mem_data <= IN_DATA;
+			elsif(sel = "01") then
+				mem_data <= CODE_DATA;
+			elsif(sel = "10") then
+				mem_data <= DATA_RDATA + "00000001";
+			elsif(sel = "11") then
+				mem_data <= DATA_RDATA - "00000001";
+			end if;
+		end if;
+	end process MUX_process;
 	
  -- FSM 
  -- FSM present state
@@ -146,11 +178,82 @@ begin
 	
 	
  -- FSM next state
-	FSM_next_state : process
+	FSM_next_state : process(present_state)
 	begin
-	
+		-- everything is set to zero as default
+		-- my signals
+		pc_inc <= '0';
+		pc_dec <= '0';
+		cnt_inc <= '0';
+		cnt_dec <= '0';
+		ptr_inc <= '0';
+		ptr_dec <= '0';
+		
+		-- output
+		CODE_EN <= '0';
+		DATA_EN <= '0';
+		DATA_RDWR <= '0';
+		OUT_WE <= '0';
+		IN_REG <= '0';
+		
+		case FSM_current_state is
+			-- when idle, fetch next instruction
+			when state_idle =>
+				next_state <= state_fetch;
+				
+			when state_fetch =>
+				next_state <= state_decode;
+				CODE_EN <= '0';
+				
+			when state_decode =>
+				case CODE_DATA is
+					when X"3E" =>
+						next_state <= state_ptr_inc;
+					when X"3C" =>
+						next_state <= state_ptr_dec;
+					when X"2B" =>
+						next_state <= state_value_inc_read;
+					when X"2D" =>
+						next_state <= state_value_dec_read;
+					when X"5B" =>
+						next_state <= state_while_start;
+					when X"5D" =>
+						next_state <= state_while_end;
+					when X"2E" =>
+						next_state <= state_putchar;
+					when X"2C" =>
+						next_state <= state_getchar;
+					when X"23" =>
+						next_state <= state_comment;
+					-- TODO finish
+				end case;
+			
+			when state_ptr_inc =>
+				next_state <= state_fetch;
+				ptr_inc <= '1';
+				pc_inc <= '1';
+				
+			when state_ptr_dec =>
+				next_state <= state_fetch;
+				ptr_dec <= '1';
+				pc_inc <= '1';
+			
+			-- TODO:
+			-- we first have to read the value from memory
+			when state_value_inc_read =>
+				next_state <= state_value_inc_write;
+				DATA_EN <= '1';
+				
+			when state_value_inc =>
+				
+			-- we can save it
+			when state_value_inc_write =>
+				next_state <= state_fetch;
+				pc_inc <= '1';
+			-- END TODO
+				
+		end case;
 	end process FSM_next_state;
 	
-
 end behavioral;
  

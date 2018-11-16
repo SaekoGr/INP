@@ -60,18 +60,31 @@ architecture behavioral of cpu is
 	signal ptr_inc : std_logic;
 	signal ptr_dec : std_logic;
 	
+	-- data to be written to memory
+	signal mem_data : std_logic_vector(7 downto 0) := "00000000";
+	signal sel : std_logic_vector(1 downto 0) := "00";
+	
 	type fsm_state is(
 		state_idle,
 		state_fetch,
 		state_decode,
+		
 		state_ptr_inc,
 		state_ptr_dec,
+		
+		state_value_inc_read,
 		state_value_inc,
+		state_value_inc_write,
+		
+		state_value_dec_read,
 		state_value_dec,
+		state_value_dec_write,
+		
 		state_putchar,
 		state_getchar,
 		state_while_start,
 		state_while_end,
+		state_comment,
 		state_others
 		-- TODO
 	);
@@ -117,7 +130,7 @@ begin
 
 	
  -- PTR Register
-	PTR_process : process
+	PTR_process : process(RESET, CLK, ptr_inc, ptr_dec)
 	begin
 		if(RESET = '1') then
 			ptr_reg <= "0000000000";	-- when reset, ptr_reg starts from all zeros
@@ -131,6 +144,24 @@ begin
 	end process PTR_process;
 
 	DATA_ADDR <= ptr_reg;
+	
+ -- TODO: MUX
+	MUX_process : process
+	begin
+		if(RESET = '1') then
+			mem_data <= "00000000";
+		elsif(CLK'event and CLK = '1') then
+			if(sel = "00") then
+				mem_data <= IN_DATA;
+			elsif(sel = "01") then
+				mem_data <= CODE_DATA;
+			elsif(sel = "10") then
+				mem_data <= DATA_RDATA + "00000001";
+			elsif(sel = "11") then
+				mem_data <= DATA_RDATA - "00000001";
+			end if;
+		end if;
+	end process MUX_process;
 	
  -- FSM 
  -- FSM present state
@@ -169,6 +200,58 @@ begin
 			-- when idle, fetch next instruction
 			when state_idle =>
 				next_state <= state_fetch;
+				
+			when state_fetch =>
+				next_state <= state_decode;
+				CODE_EN <= '0';
+				
+			when state_decode =>
+				case CODE_DATA is
+					when X"3E" =>
+						next_state <= state_ptr_inc;
+					when X"3C" =>
+						next_state <= state_ptr_dec;
+					when X"2B" =>
+						next_state <= state_value_inc_read;
+					when X"2D" =>
+						next_state <= state_value_dec_read;
+					when X"5B" =>
+						next_state <= state_while_start;
+					when X"5D" =>
+						next_state <= state_while_end;
+					when X"2E" =>
+						next_state <= state_putchar;
+					when X"2C" =>
+						next_state <= state_getchar;
+					when X"23" =>
+						next_state <= state_comment;
+					-- TODO finish
+				end case;
+			
+			when state_ptr_inc =>
+				next_state <= state_fetch;
+				ptr_inc <= '1';
+				pc_inc <= '1';
+				
+			when state_ptr_dec =>
+				next_state <= state_fetch;
+				ptr_dec <= '1';
+				pc_inc <= '1';
+			
+			-- TODO:
+			-- we first have to read the value from memory
+			when state_value_inc_read =>
+				next_state <= state_value_inc_write;
+				DATA_EN <= '1';
+				
+			when state_value_inc =>
+				
+			-- we can save it
+			when state_value_inc_write =>
+				next_state <= state_fetch;
+				pc_inc <= '1';
+			-- END TODO
+				
 		end case;
 	end process FSM_next_state;
 	
