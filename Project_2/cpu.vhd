@@ -8,6 +8,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.std_logic_arith.all;
 use ieee.std_logic_unsigned.all;
+use ieee.numeric_std.all;
 
 -- ----------------------------------------------------------------------------
 --                        Entity declaration
@@ -61,8 +62,10 @@ architecture behavioral of cpu is
 	signal ptr_dec : std_logic;
 	
 	-- data to be written to memory
-	signal mem_data : std_logic_vector(7 downto 0) := "00000000";
+	signal mx_data : std_logic_vector(7 downto 0) := "00000000";
 	signal sel : std_logic_vector(1 downto 0) := "00";
+	
+	signal to_replace : std_logic_vector(3 downto 0) := "0000";
 	
 	type fsm_state is(
 		state_idle,
@@ -82,9 +85,15 @@ architecture behavioral of cpu is
 		
 		state_putchar,
 		state_getchar,
+		
+		state_replace_top_read,
+		state_replace_top,
+		state_replace_top_write,
+		
 		state_while_start,
 		state_while_end,
 		state_comment,
+		state_stop,
 		state_others
 		-- TODO
 	);
@@ -149,19 +158,21 @@ begin
 	MUX_process : process
 	begin
 		if(RESET = '1') then
-			mem_data <= "00000000";
+			mx_data <= "00000000";
 		elsif(CLK'event and CLK = '1') then
 			if(sel = "00") then
-				mem_data <= IN_DATA;
+				mx_data <= IN_DATA;
 			elsif(sel = "01") then
-				mem_data <= CODE_DATA;
+				mx_data <= CODE_DATA;
 			elsif(sel = "10") then
-				mem_data <= DATA_RDATA + "00000001";
+				mx_data <= DATA_RDATA - "00000001";
 			elsif(sel = "11") then
-				mem_data <= DATA_RDATA - "00000001";
+				mx_data <= DATA_RDATA + "00000001";
 			end if;
 		end if;
 	end process MUX_process;
+	
+	DATA_WDATA <= mx_data;
 	
  -- FSM 
  -- FSM present state
@@ -170,7 +181,7 @@ begin
 		if(RESET = '1') then
 			present_state <= state_idle;
 		elsif(CLK'event) and (CLK = '1') then
-			if(EN = '1') then
+			if(EN = '1') then -- it is allowed to work
 				present_state <= next_state;
 			end if;
 		end if;
@@ -188,6 +199,7 @@ begin
 		cnt_dec <= '0';
 		ptr_inc <= '0';
 		ptr_dec <= '0';
+		sel <= "00";
 		
 		-- output
 		CODE_EN <= '0';
@@ -225,32 +237,138 @@ begin
 						next_state <= state_getchar;
 					when X"23" =>
 						next_state <= state_comment;
+					when X"30" =>	-- 0
+						next_state <= state_replace_top_read;
+						to_replace <= std_logic_vector(to_unsigned(0, to_replace'length));
+					when X"31" =>	-- 1
+						next_state <= state_replace_top_read;
+						to_replace <= std_logic_vector(to_unsigned(1, to_replace'length));
+					when X"32" =>	-- 2
+						next_state <= state_replace_top_read;
+						to_replace <= std_logic_vector(to_unsigned(2, to_replace'length));
+					when X"33" =>	-- 3
+						next_state <= state_replace_top_read;
+						to_replace <= std_logic_vector(to_unsigned(3, to_replace'length));
+					when X"34" =>	-- 4
+						next_state <= state_replace_top_read;
+						to_replace <= std_logic_vector(to_unsigned(4, to_replace'length));
+					when X"35" =>	-- 5
+						next_state <= state_replace_top_read;
+						to_replace <= std_logic_vector(to_unsigned(5, to_replace'length));
+					when X"36" =>	-- 6
+						nnext_state <= state_replace_top_read;
+						to_replace <= std_logic_vector(to_unsigned(6, to_replace'length));
+					when X"37" =>	-- 7
+						next_state <= state_replace_top_read;
+						to_replace <= std_logic_vector(to_unsigned(7, to_replace'length));
+					when X"38" =>	-- 8
+						next_state <= state_replace_top_read;
+						to_replace <= std_logic_vector(to_unsigned(8, to_replace'length));
+					when X"39" =>	-- 9
+						next_state <= state_replace_top_read;
+						to_replace <= std_logic_vector(to_unsigned(9, to_replace'length));
+					when X"41" =>	-- A 
+						next_state <= state_replace_top_read;
+						to_replace <= std_logic_vector(to_unsigned(10, to_replace'length));
+					when X"42" =>	-- B
+						next_state <= state_replace_top_read;
+						to_replace <= std_logic_vector(to_unsigned(11, to_replace'length));
+					when X"43" =>	-- C
+						next_state <= state_replace_top_read;
+						to_replace <= std_logic_vector(to_unsigned(12, to_replace'length));
+					when X"44" =>	-- D
+						next_state <= state_replace_top_read;
+						to_replace <= std_logic_vector(to_unsigned(13, to_replace'length));
+					when X"45" =>	-- E
+						next_state <= state_replace_top_read;
+						to_replace <= std_logic_vector(to_unsigned(14, to_replace'length));
+					when X"46" =>	-- F
+						next_state <= state_replace_top_read;
+						to_replace <= std_logic_vector(to_unsigned(15, to_replace'length));
+					when X"00" =>
+						next_state <= state_stop;
+					when others =>
+						next_state <= state_none;						
 					-- TODO finish
 				end case;
 			
+			-- Increases ptr value
 			when state_ptr_inc =>
 				next_state <= state_fetch;
 				ptr_inc <= '1';
 				pc_inc <= '1';
 				
+			-- Decreases ptr value
 			when state_ptr_dec =>
 				next_state <= state_fetch;
 				ptr_dec <= '1';
 				pc_inc <= '1';
 			
 			-- TODO:
+			-- INCREASING VALUE
 			-- we first have to read the value from memory
 			when state_value_inc_read =>
-				next_state <= state_value_inc_write;
+				next_state <= state_value_inc;
 				DATA_EN <= '1';
+				DATA_RDWR <= '1';
 				
 			when state_value_inc =>
+				next_state <= state_value_inc_write;
+				sel <= "11";
 				
-			-- we can save it
+			-- we can save it now
 			when state_value_inc_write =>
 				next_state <= state_fetch;
+				DATA_EN <= '1';
+				DATA_RDWR <= '0';
 				pc_inc <= '1';
 			-- END TODO
+			
+			-- DESCREASING VALUE
+			when state_value_dec_read =>
+				next_state <= state_value_dec;
+				DATA_EN <= '1';
+				DATA_RDWR <= '1';
+				
+			when state_value_dec =>
+				next_state <= state_value_dec_write;
+				sel <= "10";
+				
+			when state_value_dec_write =>
+				next_state <= state_fetch;
+				DATA_EN <= '1';
+				DATA_RDWR <= '0';
+				pc_inc <= '1';
+			
+			-- Writing char to LCD monitor
+			when state_putchar_read =>
+				next_state <= state_putchar_write;
+				DATA_EN <= '1';
+				DATA_RDWR <= '1';
+				
+			when state_putchar_write =>
+				if(OUT_BUSY = '1') then -- it is busy, cannot putchar yet
+					next_state <= state_putchar_write; -- repeat enabling of reading until we can write it out
+					DATA_EN <= '1';
+					DATA_RDWRD <= '1';
+				elsif(OUT_BUSY = '0') then -- it is not busy, can putchar now
+					next_state <= state_fetch;
+					OUT_WE <= '1';
+					pc_inc <= '1';
+				end if;
+				
+			when state_comment =>
+				if(CODE_DATA = X"23") then
+					next_state <= state_fetch;
+				end if;
+				pc_inc <= '1';
+				
+			when state_halt =>
+				next_state <= state_halt;
+				
+			when state_none =>
+				next_state <= state_fetch;
+				pc_inc <= '1';
 				
 		end case;
 	end process FSM_next_state;
