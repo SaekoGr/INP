@@ -47,36 +47,103 @@ end cpu;
 --                      Architecture declaration
 -- ----------------------------------------------------------------------------
 architecture behavioral of cpu is
-
- -- zde dopiste potrebne deklarace signalu
+	signal pc_reg : std_logic_vector(11 downto 0);
+	signal pc_inc : std_logic;
+	signal pc_dec : std_logic;
+	
+	signal cnt_reg : std_logic_vector(7 downto 0);
+	signal cnt_inc : std_logic;
+	signal cnt_dec : std_logic;
+	
+	signal ptr_reg : std_logic_vector(9 downto 0);
+	signal ptr_inc : std_logic;
+	signal ptr_dec : std_logic;
+	
+	type instruction is(
+		ptr_inc,
+		ptr_dec,
+		value_inc,
+		value_dec
+		-- TODO
+	);
+	signal current_instruction : insruction;
+	
+	type fsm_state is(
+		state_idle,
+		state_fetch_0,
+		state_fetch_1,
+		state_decode,
+		state_ptr_inc,
+		state_ptr_dec,
+		state_value_inc,
+		state_value_dec
+		-- TODO
+	);
+	signal present_state : fsm_state; 
+	signal next_state : fsm_state;
 
 begin
 
  -- PC Register
-	PC_process : process
+	PC_process : process(RESET, CLK, pc_inc, pc_dec)
 	begin
-		
+		if(RESET = '1') then
+			pc_reg <= "000000000000";
+		elsif(CLK'event) and (CLK='1') then
+			if(pc_inc = '1') then
+				pc_reg <= pc_reg + 1;
+			elsif(pc_dec = '1') then
+				pc_reg <= reg - 1;
+			end if;
+		end if;
 	end process PC_process;
 
+	CODE_ADDR <= pc_reg;
+
  -- CNT Register
-	CNT_process : process
+	CNT_process : process(RESET, CLK, cnt_inc, cnt_dec)
 	begin
-	
+		if(RESET = '1') then
+			cnt_reg <= "00000000";
+		elsif(CLK'event) and (CLK = '1') then
+			if(cnt_inc = '1')then
+				cnt_reg <= cnt_reg + 1;
+			elsif(cnt_dec = '1')then
+				cnt_reg <= cnt_reg - 1;
+			end if;
+		end if;
 	end process CNT_process;
+
 	
  -- PTR Register
 	PTR_process : process
 	begin
-	
+		if(RESET = '1') then
+			ptr_reg <= "0000000000";
+		elsif(CLK'event) and (CLK = '1') then
+			if(ptr_inc = '1') then
+				ptr_reg <= ptr_reg + 1;
+			elsif(ptr_dec = '1') then
+				ptr_reg <= ptr_reg - 1;
+			end if;
+		end if;
 	end process PTR_process;
+
+	DATA_ADDR <= ptr_reg;
 	
- -- FSM
- 
+ -- FSM 
  -- FSM present state
-	FSM_present_state : process
+	FSM_present_state : process(RESET, CLK, EN)
 	begin
-	
+		if(RESET = '1') then
+			present_state <= state_idle;
+		elsif(CLK'event) and (CLK = '1') then
+			if(EN = '1') then
+				present_state <= next_state;
+			end if;
+		end if;
 	end process FSM_present_state;
+	
 	
  -- FSM next state
 	FSM_next_state : process
