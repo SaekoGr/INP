@@ -66,6 +66,8 @@ architecture behavioral of cpu is
 	signal sel : std_logic_vector(1 downto 0) := "00";
 	
 	signal to_replace : std_logic_vector(3 downto 0) := "0000";
+	signal can_replace : std_logic := '0';
+	signal use_mux : std_logic := '0';
 	
 	type fsm_state is(
 		state_idle,
@@ -155,19 +157,26 @@ begin
 	DATA_ADDR <= ptr_reg;
 	
  -- TODO: MUX
-	MUX_process : process
+	MUX_process : process(RESET, CLK, sel, can_replace, use_mux)
 	begin
 		if(RESET = '1') then
 			mx_data <= "00000000";
 		elsif(CLK'event and CLK = '1') then
-			if(sel = "00") then
-				mx_data <= IN_DATA;
-			elsif(sel = "01") then
-				mx_data <= CODE_DATA;
-			elsif(sel = "10") then
-				mx_data <= DATA_RDATA - "00000001";
-			elsif(sel = "11") then
-				mx_data <= DATA_RDATA + "00000001";
+			-- mux
+			if(use_mux = '1') then
+				if(sel = "00") then
+					mx_data <= IN_DATA;
+				elsif(sel = "01") then
+					mx_data <= CODE_DATA;
+				elsif(sel = "10") then
+					mx_data <= DATA_RDATA - "00000001";
+				elsif(sel = "11") then
+					mx_data <= DATA_RDATA + "00000001";
+				end if;
+			elsif(use_mux = '0') then
+				if(can_replace = '1') then
+					mx_data <= to_replace & "0000";	
+				end if;
 			end if;
 		end if;
 	end process MUX_process;
@@ -200,6 +209,8 @@ begin
 		ptr_inc <= '0';
 		ptr_dec <= '0';
 		sel <= "00";
+		can_replace <= '0';
+		use_mux <= '0';
 		
 		-- output
 		CODE_EN <= '0';
@@ -215,7 +226,7 @@ begin
 				
 			when state_fetch =>
 				next_state <= state_decode;
-				CODE_EN <= '0';
+				CODE_EN <= '1';
 				
 			when state_decode =>
 				case CODE_DATA is
@@ -314,6 +325,7 @@ begin
 				
 			when state_value_inc =>
 				next_state <= state_value_inc_write;
+				use_mux <= '1';
 				sel <= "11";
 				
 			-- we can save it now
@@ -332,9 +344,26 @@ begin
 				
 			when state_value_dec =>
 				next_state <= state_value_dec_write;
+				use_mux <= '1';
 				sel <= "10";
 				
 			when state_value_dec_write =>
+				next_state <= state_fetch;
+				DATA_EN <= '1';
+				DATA_RDWR <= '0';
+				pc_inc <= '1';
+				
+			-- Replacing top 4 bites
+			when state_replace_top_read =>
+				next_state <= state_replace_top;
+				DATA_EN <= '1';
+				DATA_RDWR <= '1';
+				
+			when state_replace_top =>
+				next_state <= state_replace_write;
+				can_replace <= '1';
+				
+			when state_replace_write =>
 				next_state <= state_fetch;
 				DATA_EN <= '1';
 				DATA_RDWR <= '0';
@@ -357,6 +386,24 @@ begin
 					pc_inc <= '1';
 				end if;
 				
+			-- GETCHAR
+			when state_getchar =>
+				next_state <= state_getchar;
+				IN_REQ <= '1';
+				if(IN_VLD = '1') then
+					next_state <= state_fetch;
+					use_mux <= '1';
+					sel <= "00";
+					DATA <= '1';
+					DATA_RDWR <= '0';
+					IN_REQ <= '0';
+					pc_inc <= '1';
+				end if;
+				
+			-- WHILE
+			
+				
+			-- COMMENT
 			when state_comment =>
 				if(CODE_DATA = X"23") then
 					next_state <= state_fetch;
