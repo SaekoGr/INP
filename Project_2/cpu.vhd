@@ -85,16 +85,30 @@ architecture behavioral of cpu is
 		state_value_dec,
 		state_value_dec_write,
 		
-		state_putchar,
-		state_getchar,
+		state_putchar_read,
+		state_putchar_write,
+		
+		state_getchar_read_0,
+		state_getchar_read_1,
 		
 		state_replace_top_read,
 		state_replace_top,
 		state_replace_top_write,
 		
-		state_while_start,
-		state_while_end,
-		state_comment,
+		state_while_start_1,
+		state_while_start_2,
+		state_while_start_3,
+		state_while_start_4,
+		
+		state_while_end_1,
+		state_while_end_2,
+		state_while_end_3,
+		state_while_end_4,
+		state_while_end_5,
+		
+		state_comment_0,
+		state_comment_1,
+		
 		state_stop,
 		state_others
 		-- TODO
@@ -118,7 +132,7 @@ begin
 			if(pc_inc = '1') then            -- increases pc_reg
 				pc_reg <= pc_reg + 1;
 			elsif(pc_dec = '1') then			-- decreases pc_reg
-				pc_reg <= reg - 1;
+				pc_reg <= pc_reg - 1;
 			end if;
 		end if;
 	end process PC_process;
@@ -217,9 +231,9 @@ begin
 		DATA_EN <= '0';
 		DATA_RDWR <= '0';
 		OUT_WE <= '0';
-		IN_REG <= '0';
+		IN_REQ <= '0';
 		
-		case FSM_current_state is
+		case present_state is
 			-- when idle, fetch next instruction
 			when state_idle =>
 				next_state <= state_fetch;
@@ -239,15 +253,15 @@ begin
 					when X"2D" =>
 						next_state <= state_value_dec_read;
 					when X"5B" =>
-						next_state <= state_while_start;
+						next_state <= state_while_start_1;
 					when X"5D" =>
-						next_state <= state_while_end;
+						next_state <= state_while_end_1;
 					when X"2E" =>
-						next_state <= state_putchar;
+						next_state <= state_putchar_read;
 					when X"2C" =>
-						next_state <= state_getchar;
+						next_state <= state_getchar_read_0;
 					when X"23" =>
-						next_state <= state_comment;
+						next_state <= state_comment_0;
 					when X"30" =>	-- 0
 						next_state <= state_replace_top_read;
 						to_replace <= std_logic_vector(to_unsigned(0, to_replace'length));
@@ -267,7 +281,7 @@ begin
 						next_state <= state_replace_top_read;
 						to_replace <= std_logic_vector(to_unsigned(5, to_replace'length));
 					when X"36" =>	-- 6
-						nnext_state <= state_replace_top_read;
+						next_state <= state_replace_top_read;
 						to_replace <= std_logic_vector(to_unsigned(6, to_replace'length));
 					when X"37" =>	-- 7
 						next_state <= state_replace_top_read;
@@ -299,7 +313,7 @@ begin
 					when X"00" =>
 						next_state <= state_stop;
 					when others =>
-						next_state <= state_none;						
+						next_state <= state_others;						
 					-- TODO finish
 				end case;
 			
@@ -360,10 +374,10 @@ begin
 				DATA_RDWR <= '1';
 				
 			when state_replace_top =>
-				next_state <= state_replace_write;
+				next_state <= state_replace_top_write;
 				can_replace <= '1';
 				
-			when state_replace_write =>
+			when state_replace_top_write =>
 				next_state <= state_fetch;
 				DATA_EN <= '1';
 				DATA_RDWR <= '0';
@@ -379,7 +393,7 @@ begin
 				if(OUT_BUSY = '1') then -- it is busy, cannot putchar yet
 					next_state <= state_putchar_write; -- repeat enabling of reading until we can write it out
 					DATA_EN <= '1';
-					DATA_RDWRD <= '1';
+					DATA_RDWR <= '1';
 				elsif(OUT_BUSY = '0') then -- it is not busy, can putchar now
 					next_state <= state_fetch;
 					OUT_WE <= '1';
@@ -387,38 +401,123 @@ begin
 				end if;
 				
 			-- GETCHAR
-			when state_getchar =>
-				next_state <= state_getchar;
+			when state_getchar_read_0 =>
+				next_state <= state_getchar_read_1;
 				IN_REQ <= '1';
+				use_mux <= '1';
+				sel <= "00";
+				
+			when state_getchar_read_1 =>
 				if(IN_VLD = '1') then
 					next_state <= state_fetch;
-					use_mux <= '1';
-					sel <= "00";
-					DATA <= '1';
+					DATA_EN <= '1';
 					DATA_RDWR <= '0';
 					IN_REQ <= '0';
 					pc_inc <= '1';
+				else
+					next_state <= state_getchar_read_1;
+					IN_REQ <= '1';
+					use_mux <= '1';
+					sel <= "00";
 				end if;
 				
-			-- WHILE
+			-- WHILE START
+			when state_while_start_1 =>
+				next_state <= state_while_start_2;
+				pc_inc <= '1';
+				DATA_EN <= '1';
+				DATA_RDWR <= '1';
 			
+			when state_while_start_2 =>
+				if(DATA_RDATA = "00000000") then
+					next_state <= state_while_start_3;
+					CODE_EN <= '1';
+					cnt_inc <= '1';
+				else
+					next_state <= state_fetch;
+				end if;
+				
+			when state_while_start_3 =>
+				if(cnt_reg = "00000000") then
+					next_state <= state_fetch;
+				else
+					if(CODE_DATA = X"5B") then
+					cnt_inc <= '1';
+					elsif(CODE_DATA = X"5D") then
+					cnt_dec <= '1';
+					end if;
+					next_state <= state_while_start_4;
+					pc_inc <= '1';
+				end if;
+				
+			when state_while_start_4 =>
+				next_state <= state_while_start_3;
+				CODE_EN <= '1';
+				
+			-- WHILE END
+			when state_while_end_1 =>
+				next_state <= state_while_end_2;
+				DATA_EN <= '1';
+				DATA_RDWR <= '1';
+				
+			when state_while_end_2 =>
+				if(DATA_RDATA = "00000000") then
+					next_state <= state_fetch;
+					pc_inc <= '1';
+				else
+					next_state <= state_while_end_3;
+					cnt_inc <= '1';
+					pc_dec <= '1';
+				end if;
+				
+			when state_while_end_3 =>
+				if(cnt_reg = "00000000") then
+					next_state <= state_fetch;
+				else
+					next_state <= state_while_end_4;
+					CODE_EN <= '1';
+				end if;
+				
+			when state_while_end_4 =>
+				if(CODE_DATA = X"5B") then -- '['
+					cnt_dec <= '1';
+				elsif(CODE_DATA = X"5D") then -- ']'
+					cnt_inc <= '1';
+				end if;
+				next_state <= state_while_end_5;
+				
+			when state_while_end_5 =>
+				if(cnt_reg = "00000000") then
+					pc_inc <= '1';
+				else
+					pc_dec <= '1';
+				end if;
+				next_state <= state_while_end_3;
 				
 			-- COMMENT
-			when state_comment =>
+			when state_comment_0 =>
+				CODE_EN <= '1';
+				next_state <= state_comment_1;
+				
+			when state_comment_1 =>
 				if(CODE_DATA = X"23") then
 					next_state <= state_fetch;
+				else
+					next_state <= state_comment_0;
 				end if;
 				pc_inc <= '1';
 				
-			when state_halt =>
-				next_state <= state_halt;
+			when state_stop =>
+				next_state <= state_stop;
 				
-			when state_none =>
+			when state_others =>
 				next_state <= state_fetch;
 				pc_inc <= '1';
 				
 		end case;
 	end process FSM_next_state;
+	
+	OUT_DATA <= DATA_RDATA;
 	
 end behavioral;
  
